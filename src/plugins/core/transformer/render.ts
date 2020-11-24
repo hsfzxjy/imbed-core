@@ -134,7 +134,9 @@ class Renderer {
     }
 
     private dest(ext: string): string {
-        return this.input.source.blankDest ? this.sourceContentHash + ext : this.input.source.dest
+        return this.input.source.blankDest || !this.input.source.dest
+            ? this.sourceContentHash + ext
+            : this.input.source.dest
     }
 
     private imageFromCache(): string | undefined {
