@@ -1,3 +1,5 @@
+<!-- @format -->
+
 # PicGo-Core
 
 ![standard](https://img.shields.io/badge/code%20style-standard-green.svg?style=flat-square)
@@ -85,11 +87,11 @@ Thanks to [vs-picgo](https://github.com/Spades-S/vs-picgo) && [Spades-S](https:/
 ### Use in node project
 
 ```js
-const PicGo = require('picgo')
+const PicGo = require("picgo")
 const picgo = new PicGo()
 
 // upload a picture from path
-picgo.upload(['/xxx/xxx.jpg'])
+picgo.upload(["/xxx/xxx.jpg"])
 
 // upload a picture from clipboard
 picgo.upload()
