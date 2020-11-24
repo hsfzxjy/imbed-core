@@ -98,7 +98,8 @@ class Lifecycle extends EventEmitter {
                 return urllib.encode(out.imgUrl)
             })
             .join("\n")
-        this.ctx.log.success("===> URL(s)\n" + result)
+        this.ctx.log.success("===> URL(s)")
+        console.log(result)
     }
 
     private async handleHooks(registry: Registry, entries?: string[]): Promise<Imbed> {
