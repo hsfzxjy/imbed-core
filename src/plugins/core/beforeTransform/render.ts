@@ -20,7 +20,6 @@ export default {
             }
 
             item.source.src = await getStdin()
-            console.log(item.source.src)
         })
     },
 }
