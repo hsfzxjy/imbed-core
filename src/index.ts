@@ -1,3 +1,5 @@
-import PicGo from './core/PicGo'
+/** @format */
 
-export = PicGo
+import Imbed from "./core/Imbed"
+
+export = Imbed

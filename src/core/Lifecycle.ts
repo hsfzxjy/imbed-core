@@ -1,125 +1,132 @@
-import { EventEmitter } from 'events'
-import PicGo from './PicGo'
-import { IPlugin, Undefinable } from '../utils/interfaces'
-import { handleUrlEncode } from '../utils/common'
-import LifecyclePlugins from '../lib/LifecyclePlugins'
+/** @format */
+
+import { EventEmitter } from "events"
+import Imbed from "core/Imbed"
+import { IHook } from "utils/interfaces"
+import { asynclib, urllib } from "utils/common"
+import Registry from "lib/Registry"
+import { except } from "utils/except"
 
 class Lifecycle extends EventEmitter {
-  configPath: string
-  ctx: PicGo
+    ctx: Imbed
 
-  constructor (ctx: PicGo) {
-    super()
-    this.ctx = ctx
-  }
-
-  async start (input: any[]): Promise<PicGo> {
-    try {
-      // images input
-      if (!Array.isArray(input)) {
-        throw new Error('Input must be an array.')
-      }
-      this.ctx.input = input
-      this.ctx.output = []
-
-      // lifecycle main
-      await this.beforeTransform()
-      await this.doTransform()
-      await this.beforeUpload()
-      await this.doUpload()
-      await this.afterUpload()
-      return this.ctx
-    } catch (e) {
-      this.ctx.log.warn('failed')
-      this.ctx.emit('uploadProgress', -1)
-      this.ctx.emit('failed', e)
-      this.ctx.log.error(e)
-      if (this.ctx.getConfig<Undefinable<string>>('debug')) {
-        throw e
-      }
-      return this.ctx
+    constructor(ctx: Imbed) {
+        super()
+        this.ctx = ctx
     }
-  }
 
-  private async beforeTransform (): Promise<PicGo> {
-    this.ctx.emit('uploadProgress', 0)
-    this.ctx.emit('beforeTransform', this.ctx)
-    this.ctx.log.info('Before transform')
-    await this.handlePlugins(this.ctx.helper.beforeTransformPlugins)
-    return this.ctx
-  }
+    async start(input: any[]): Promise<any> {
+        return await except({
+            emit: { "upload-failed": [] },
+        })
+            .do(async () => {
+                if (!Array.isArray(input)) {
+                    throw new Error("Input must be an array.")
+                }
+                this.ctx.input = input
+                this.ctx.output = []
 
-  private async doTransform (): Promise<PicGo> {
-    this.ctx.emit('uploadProgress', 30)
-    this.ctx.log.info('Transforming...')
-    const type = this.ctx.getConfig<Undefinable<string>>('picBed.transformer') || 'path'
-    let transformer = this.ctx.helper.transformer.get(type)
-    if (!transformer) {
-      transformer = this.ctx.helper.transformer.get('path')
-      this.ctx.log.warn(`Can't find transformer - ${type}, switch to default transformer - path`)
+                // lifecycle main
+                this.ctx.enter("lifecycle")
+                await this.beforeTransform()
+                await this.doTransform()
+                await this.beforeUpload()
+                await this.doUpload()
+                await this.afterUpload()
+            })
+            .finally(() => {
+                this.ctx.leave("lifecycle")
+            })
     }
-    await transformer?.handle(this.ctx)
-    return this.ctx
-  }
 
-  private async beforeUpload (): Promise<PicGo> {
-    this.ctx.emit('uploadProgress', 60)
-    this.ctx.log.info('Before upload')
-    this.ctx.emit('beforeUpload', this.ctx)
-    await this.handlePlugins(this.ctx.helper.beforeUploadPlugins)
-    return this.ctx
-  }
-
-  private async doUpload (): Promise<PicGo> {
-    this.ctx.log.info('Uploading...')
-    let type = this.ctx.getConfig<Undefinable<string>>('picBed.uploader') || this.ctx.getConfig<Undefinable<string>>('picBed.current') || 'smms'
-    let uploader = this.ctx.helper.uploader.get(type)
-    if (!uploader) {
-      type = 'smms'
-      uploader = this.ctx.helper.uploader.get('smms')
-      this.ctx.log.warn(`Can't find uploader - ${type}, switch to default uploader - smms`)
+    private async beforeTransform(): Promise<Imbed> {
+        this.ctx.emit("upload-progress", 0)
+        this.ctx.emit("before-transform", this.ctx)
+        await this.handleHooks(this.ctx.hooks.beforeTransform)
+        return this.ctx
     }
-    await uploader?.handle(this.ctx)
-    for (const outputImg of this.ctx.output) {
-      outputImg.type = type
-    }
-    return this.ctx
-  }
 
-  private async afterUpload (): Promise<PicGo> {
-    this.ctx.emit('afterUpload', this.ctx)
-    this.ctx.emit('uploadProgress', 100)
-    await this.handlePlugins(this.ctx.helper.afterUploadPlugins)
-    let msg = ''
-    const length = this.ctx.output.length
-    for (let i = 0; i < length; i++) {
-      msg += handleUrlEncode(this.ctx.output[i].imgUrl)
-      if (i !== length - 1) {
-        msg += '\n'
-      }
-      delete this.ctx.output[i].base64Image
-      delete this.ctx.output[i].buffer
+    private async doTransform(): Promise<Imbed> {
+        this.ctx.emit("upload-progress", 30)
+        await this.handleHooks(this.ctx.hooks.transformer, this.ctx.cfg.transforms())
+        return this.ctx
     }
-    this.ctx.emit('finished', this.ctx)
-    this.ctx.log.success(`\n${msg}`)
-    return this.ctx
-  }
 
-  private async handlePlugins (lifeCyclePlugins: LifecyclePlugins): Promise<PicGo> {
-    const plugins = lifeCyclePlugins.getList()
-    const pluginNames = lifeCyclePlugins.getIdList()
-    const lifeCycleName = lifeCyclePlugins.getName()
-    await Promise.all(plugins.map(async (plugin: IPlugin, index: number) => {
-      try {
-        this.ctx.log.info(`${lifeCycleName}: ${pluginNames[index]} running`)
-        await plugin.handle(this.ctx)
-      } catch (e) {
-        this.ctx.log.error(`${lifeCycleName}: ${pluginNames[index]} error`)
-        throw e
-      }
-    }))
-    return this.ctx
-  }
+    private async beforeUpload(): Promise<Imbed> {
+        this.ctx.emit("upload-progress", 60)
+        this.ctx.emit("before-upload", this.ctx)
+        await this.handleHooks(this.ctx.hooks.beforeUpload)
+        return this.ctx
+    }
+
+    private async doUpload(): Promise<Imbed> {
+        let name = this.ctx.cfg.uploader()
+        let uploader = this.ctx.hooks.uploader.get(name, "smms")!
+        this.ctx.log.info(`Uploader - ${name} running`)
+
+        if (
+            !this.ctx.cfg.get<any>("render.options")?.forceUpload &&
+            !uploader.supportSoftUpload &&
+            this.ctx.output.some((x) => x.needsUpload)
+        ) {
+            throw new Error(`Uploader - ${name} does not support soft upload`)
+        }
+
+        await uploader?.handle(this.ctx)
+        for (const outputImg of this.ctx.output) {
+            outputImg.type = name
+        }
+        this.ctx.log.info(`Uploader - ${name} done`)
+        return this.ctx
+    }
+
+    private async afterUpload(): Promise<Imbed> {
+        this.ctx.emit("upload-progress", 100)
+        this.ctx.emit("after-upload", this.ctx)
+        await this.handleHooks(this.ctx.hooks.afterUpload)
+        this.ctx.emit("upload-finished", this.ctx)
+
+        this.printImageURLs()
+
+        return this.ctx
+    }
+
+    private printImageURLs() {
+        const result = this.ctx.output
+            .map((out) => {
+                delete out.buffer
+                return urllib.encode(out.imgUrl)
+            })
+            .join("\n")
+        this.ctx.log.success("===> URL(s)\n" + result)
+    }
+
+    private async handleHooks(registry: Registry, entries?: string[]): Promise<Imbed> {
+        const hooks = registry.resolve(entries)
+        if (hooks.missing.length) {
+            hooks.missing.forEach((name) => {
+                this.ctx.log.error(`Unknown ${registry.name} - ${name}`)
+            })
+            throw Error(`Unknown ${registry.name}: ${hooks.missing}`)
+        }
+        await asynclib.M(hooks.resolved).seqEach(([name, hook]: [string, IHook]) =>
+            except({
+                handler: () => {
+                    this.ctx.log.error(`${registry.name} - ${name} error`)
+                },
+            }).do(async () => {
+                if (!hook.handle) {
+                    this.ctx.log.warn(`${registry.name} - ${name} has no \`handle()\`, skipped`)
+                    return
+                }
+                this.ctx.log.info(`${registry.name} - ${name} running`)
+                await hook.handle(this.ctx)
+                this.ctx.log.info(`${registry.name} - ${name} done`)
+            })
+        )
+
+        return this.ctx
+    }
 }
 
 export default Lifecycle

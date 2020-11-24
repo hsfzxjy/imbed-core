@@ -12,6 +12,7 @@ if [ ! -n "$filePath" ] ;then
       echo $1
   else
       echo "no image"
+      exit 1
   fi
 else
   echo $filePath
